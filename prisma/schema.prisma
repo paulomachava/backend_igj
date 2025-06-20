@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  password      String
+  status        UserStatus     @default(activo)
+  role          UserRole
+  lastLogin     DateTime?      @map("last_login")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updateAt      DateTime?      @updatedAt @map("updated_at")
+  createdBy     String?        @map("created_by")
+  Casino        Casino[]
+  Client        Client[]
+  Interdiction  Interdiction[]
+  Occurrence    Occurrence[]
+  RefreshToken  RefreshToken[]
+  SpecialTax    SpecialTax[]
+  StampTax      StampTax[]
+  Transaction   Transaction[]
+  createdByUser User?          @relation("CreatedUsers", fields: [createdBy], references: [id])
+  createdUsers  User[]         @relation("CreatedUsers")
+
+  @@map("users")
+}
+
+model Casino {
+  id              String         @id @default(uuid())
+  name            String
+  contact         String?
+  email           String?
+  location        CasinoLocation
+  adress          String
+  foundedIn       DateTime       @map("founded_in")
+  licenseNr       String         @map("license_nr")
+  licenseValidity DateTime       @map("license_validity")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updateAt        DateTime?      @updatedAt @map("updated_at")
+  userId          String         @map("user_id")
+  user            User           @relation(fields: [userId], references: [id])
+  clients         Client[]
+  interdictions   Interdiction[]
+  occurrences     Occurrence[]
+  SpecialTax      SpecialTax[]
+  StampTax        StampTax[]
+  transactions    Transaction[]
+
+  @@map("casinos")
+}
+
+model Client {
+  id                  String             @id @default(uuid())
+  name                String
+  id_type             ClientIDType       @default(BI)
+  id_number           String             @unique
+  email               String?
+  phone               String?
+  casino_id           String
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updateAt            DateTime?          @updatedAt @map("updated_at")
+  userId              String             @map("user_id")
+  clients_attachments ClientAttachment[]
+  casino              Casino             @relation(fields: [casino_id], references: [id], onDelete: Cascade)
+  user                User               @relation(fields: [userId], references: [id])
+  interdictions       Interdiction[]
+  occurrences         Occurrence[]
+  transactions        Transaction[]
+
+  @@map("clients")
+}
+
+model Interdiction {
+  id                        String                   @id @default(uuid())
+  clientId                  String                   @map("client_id")
+  casinoId                  String                   @map("casino_id")
+  type                      InterdictionType
+  reason                    String
+  period                    InterdictionPeriod 
+  startDate                  DateTime?
+  endDate                   DateTime?
+  status                    InterdictionStatus       @default(pendente)
+  createdAt                 DateTime                 @default(now()) @map("created_at")
+  updateAt                  DateTime?                @updatedAt @map("updated_at")
+  userId                    String                   @map("user_id")
+  casino                    Casino                   @relation(fields: [casinoId], references: [id], onDelete: Cascade)
+  client                    Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user                      User                     @relation(fields: [userId], references: [id])
+  interdictions_attachments InterdictionAttachment[]
+
+  @@map("interdictions")
+}
+
+model Transaction {
+  id        String          @id @default(uuid())
+  clientId  String          @map("client_id")
+  casinoId  String          @map("casino_id")
+  amount    Decimal
+  date      DateTime
+  type      TransactionType
+  createdAt DateTime        @default(now()) @map("created_at")
+  updateAt  DateTime?       @updatedAt @map("updated_at")
+  userId    String          @map("user_id")
+  casino    Casino          @relation(fields: [casinoId], references: [id], onDelete: Cascade)
+  client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id])
+
+  @@map("transactions")
+}
+
+model Occurrence {
+  id                      String                 @id @default(uuid())
+  clientId                String                 @map("client_id")
+  casinoId                String                 @map("casino_id")
+  title                   String
+  description             String
+  date                    String
+  hour                    String              
+  status                  OccurrenceStatus
+  createdAt               DateTime               @default(now()) @map("created_at")
+  updateAt                DateTime?              @updatedAt @map("updated_at")
+  userId                  String                 @map("user_id")
+  casino                  Casino                 @relation(fields: [casinoId], references: [id], onDelete: Cascade)
+  client                  Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user                    User                   @relation(fields: [userId], references: [id])
+  occurrences_attachments OccurrenceAttachment[]
+
+  @@map("occurrences")
+}
+
+model ClientAttachment {
+  id        String         @id @default(uuid())
+  name      String?
+  type      AttachmentType
+  url       String
+  clientId  String?        @map("client_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updateAt  DateTime?      @updatedAt @map("updated_at")
+  client    Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model InterdictionAttachment {
+  id             String         @id @default(uuid())
+  name           String?
+  type           AttachmentType
+  url            String
+  interdictionId String?        @map("interdiction_id")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updateAt       DateTime?      @updatedAt @map("updated_at")
+  interdiction   Interdiction?  @relation(fields: [interdictionId], references: [id], onDelete: Cascade)
+
+  @@map("interdictions_attachments")
+}
+
+model OccurrenceAttachment {
+  id           String         @id @default(uuid())
+  name         String?
+  type         AttachmentType
+  url          String
+  occurrenceId String?        @map("occurrence_id")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updateAt     DateTime?      @updatedAt @map("updated_at")
+  occurrence   Occurrence?    @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+
+  @@map("occurrences_attachments")
+}
+
+model SpecialTax {
+  id            String    @id @default(uuid())
+  casinoId      String    @map("casino_id")
+  tableResult   Decimal   @map("table_result")
+  machineResult Decimal   @map("machine_result")
+  date          DateTime
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updateAt      DateTime? @updatedAt @map("updated_at")
+  userId        String    @map("user_id")
+  casino        Casino    @relation(fields: [casinoId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id])
+
+  @@map("special_taxes")
+}
+
+model StampTax {
+  id          String    @id @default(uuid())
+  casinoId    String    @map("casino_id")
+  ticketsSold Int       @map("tickets_sold")
+  date        DateTime
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updateAt    DateTime? @updatedAt @map("updated_at")
+  userId      String    @map("user_id")
+  casino      Casino    @relation(fields: [casinoId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@map("stamp_taxes")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_token")
+}
+
+enum UserRole {
+  admin
+  gestor
+  tecnico
+}
+
+enum UserStatus {
+  activo
+  inactivo
+}
+
+enum AttachmentType {
+  PDF
+  Document
+  Image
+}
+
+enum CasinoLocation {
+  Maputo
+  Matola
+  Inhambane
+  Gaza
+  Beira
+  Manica
+  Zambezia
+  Tete
+  Nampula
+  Niassa
+  Pemba
+}
+
+enum TransactionType {
+  cash
+  bank
+}
+
+enum OccurrenceStatus {
+  pendente
+  resolvido
+  em_analise
+}
+
+enum ClientIDType {
+  BI
+  Dir
+  passporte
+  carta_conducao @map("Carta de condução")
+}
+
+enum InterdictionType {
+  voluntaria
+  judicial
+  administrativa
+}
+
+enum InterdictionStatus {
+  pendente
+  aprovada
+  rejeitada
+}
+
+enum InterdictionPeriod {
+  seis_meses
+  um_ano
+  dois_anos
+  tres_anos
+  cinco_anos
+  indefinido
+}
