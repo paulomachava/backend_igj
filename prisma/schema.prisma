@@ -71,7 +71,7 @@ model Client {
   casino              Casino             @relation(fields: [casino_id], references: [id], onDelete: Cascade)
   user                User               @relation(fields: [userId], references: [id])
   interdictions       Interdiction[]
-  occurrences         Occurrence[]
+  occurrences         OccurrenceClient[] // Relacionamento muitos-para-muitos
   transactions        Transaction[]
 
   @@map("clients")
@@ -117,21 +117,21 @@ model Transaction {
 
 model Occurrence {
   id                      String                 @id @default(uuid())
-  clientId                String                 @map("client_id")
   casinoId                String                 @map("casino_id")
   title                   String
   description             String
   date                    String
-  hour                    String              
+  hour                    String
   status                  OccurrenceStatus
   createdAt               DateTime               @default(now()) @map("created_at")
   updateAt                DateTime?              @updatedAt @map("updated_at")
   userId                  String                 @map("user_id")
+  
   casino                  Casino                 @relation(fields: [casinoId], references: [id], onDelete: Cascade)
-  client                  Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user                    User                   @relation(fields: [userId], references: [id])
   occurrences_attachments OccurrenceAttachment[]
-
+  clients                 OccurrenceClient[]     // Relacionamento muitos-para-muitos
+  
   @@map("occurrences")
 }
 
@@ -170,6 +170,20 @@ model OccurrenceAttachment {
   occurrence   Occurrence?    @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
 
   @@map("occurrences_attachments")
+}
+
+model OccurrenceClient {
+  id           String     @id @default(uuid())
+  occurrenceId String     @map("occurrence_id")
+  clientId     String     @map("client_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updateAt     DateTime?  @updatedAt @map("updated_at")
+  
+  occurrence   Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  client       Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@unique([occurrenceId, clientId])
+  @@map("occurrence_clients")
 }
 
 model SpecialTax {

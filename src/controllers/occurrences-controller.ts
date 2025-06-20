@@ -22,7 +22,7 @@ const hourRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
 
 //occurrence schema
 const occurrenceSchema = z.object({
-    clientId: z.string().uuid(),
+    clientIds: z.array(z.string().uuid()).min(1, "Deve haver pelo menos um cliente"),
     casinoId: z.string().uuid(),
     title: z.string().min(1),
     description: z.string().min(1),
@@ -34,30 +34,48 @@ const occurrenceSchema = z.object({
             return dateObj.getDate() === day && 
                    dateObj.getMonth() === month - 1 && 
                    dateObj.getFullYear() === year;
-        }, "Data inválida"),
+        }, "Data inválida")
+        .refine((date) => {
+            const [day, month, year] = date.split('-').map(Number);
+            const dateObj = new Date(year, month - 1, day);
+            const currentDate = new Date();
+            currentDate.setHours(0, 0, 0, 0); // Remove hours for date comparison
+            dateObj.setHours(0, 0, 0, 0);
+            return dateObj <= currentDate;
+        }, "A data da ocorrência não pode estar no futuro"),
     hour: z.string()
         .regex(hourRegex, "Hora deve estar no formato HH:mm"),
     status: z.enum([OccurrenceStatus.em_analise, OccurrenceStatus.pendente, OccurrenceStatus.resolvido])
         .default(OccurrenceStatus.pendente),
+}).refine((data) => {
+    // Validate that the date and hour combination is not in the future
+    const [day, month, year] = data.date.split('-').map(Number);
+    const [hour, minute] = data.hour.split(':').map(Number);
+    const occurrenceDateTime = new Date(year, month - 1, day, hour, minute);
+    const currentDateTime = new Date();
+    return occurrenceDateTime <= currentDateTime;
+}, {
+    message: "A data e hora da ocorrência não podem estar no futuro",
+    path: ["hour"] // Show error on hour field
 });
 
 class OccurrencesController {
 
     async createOccurrence(req: Request, res: Response) {
         try {
-            const { clientId, casinoId, title, description, date, hour, status } = occurrenceSchema.parse(req.body);
+            const { clientIds, casinoId, title, description, date, hour, status } = occurrenceSchema.parse(req.body);
             const userId = req.user?.id;
 
             if (!userId) {
                 return res.status(401).json({ error: "Usuário não autenticado" });
             }
 
-            // Check if the client exists
-            const client = await prisma.client.findUnique({
-                where: { id: clientId },
+            // Check if all clients exist
+            const clients = await prisma.client.findMany({
+                where: { id: { in: clientIds } },
             });
-            if (!client) {
-                return res.status(404).json({ error: "Cliente não encontrado" });
+            if (clients.length !== clientIds.length) {
+                return res.status(404).json({ error: "Um ou mais clientes não foram encontrados" });
             }
 
             // Check if the casino exists
@@ -70,14 +88,18 @@ class OccurrencesController {
 
             const occurrence = await prisma.occurrence.create({
                 data: {
-                    clientId,
                     casinoId,
                     title,
                     description,
                     date,
                     hour,
                     status,
-                    userId
+                    userId,
+                    clients: {
+                        create: clientIds.map(clientId => ({
+                            clientId
+                        }))
+                    }
                 }
             });
 
@@ -128,10 +150,14 @@ class OccurrencesController {
                     skip,
                 take,
                 include: {
-                    client: {
-                        select: {
-                            id: true,
-                            name: true,
+                    clients: {
+                        include: {
+                            client: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                },
+                            },
                         },
                     },
                     casino: {
@@ -176,8 +202,12 @@ class OccurrencesController {
             const { id } = req.params;
             const occurrence = await prisma.occurrence.findUnique({
                 where: { id },
-                include: {
-                    client: true,
+                            include: {
+                clients: {
+                    include: {
+                        client: true,
+                    },
+                },
                     casino: true,
                     occurrences_attachments: true,
                 },
@@ -194,18 +224,28 @@ class OccurrencesController {
     async updateOccurrence(req: Request, res: Response) {
         try {
             const { id } = req.params;
-            const { clientId, casinoId, title, description, date, hour, status } = occurrenceSchema.parse(req.body);
+            const { clientIds, casinoId, title, description, date, hour, status } = occurrenceSchema.parse(req.body);
 
+            // First, delete existing client relationships
+            await prisma.occurrenceClient.deleteMany({
+                where: { occurrenceId: id },
+            });
+
+            // Then update the occurrence and create new client relationships
             const occurrence = await prisma.occurrence.update({
                 where: { id },
                 data: {
-                    clientId,
                     casinoId,
                     title,
                     description,
                     date,
                     hour,
                     status,
+                    clients: {
+                        create: clientIds.map(clientId => ({
+                            clientId
+                        }))
+                    }
                 },
             });
             return res.status(200).json(occurrence);
@@ -219,7 +259,7 @@ class OccurrencesController {
                     }))
                 });
             }
-            return res.status(400).json({ error: error.message });
+            return res.status(400).json({ error: error instanceof Error ? error.message : "Erro desconhecido" });
         }
     }
     //delete occurrence 
@@ -315,7 +355,7 @@ class OccurrencesController {
             if (!attachment) {
                 return res.status(404).json({ error: "Attachment not found" });
             }
-            res.download(attachment.url, attachment.name);
+            res.download(attachment.url, attachment.name || 'download');
         } catch (error) {
             return res.status(500).json({ error: "Failed to download attachment" });
         }
